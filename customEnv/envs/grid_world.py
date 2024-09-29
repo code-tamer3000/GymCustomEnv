@@ -10,22 +10,22 @@ class GridWorld(gym.Env):
 
     def __init__(self, render_mode=None, size=5):
         self.size = size
-        self.window_size = 10
-        self.canvas = np.zeros(shape=(size,size))
+        self.window_size = 512
+
         self.observation_space = spaces.Dict(
             {
-                "agent": spaces.Box(0, 1, shape=(size,size), dtype=int),
-                # "target": spaces.Box(0, size - 1, shape=(2,), dtype=int)
+                "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
+                "target": spaces.Box(0, size - 1, shape=(2,), dtype=int)
             }
         )
 
         self.action_space = spaces.Discrete(4)
 
         self._action_to_direction = {
-            0: np.array([1, 0]),
-            1: np.array([0, 1]),
-            2: np.array([-1, 0]),
-            3: np.array([0, -1])
+            0: np.array([1, 0]),  # move right
+            1: np.array([0, 1]),  # move down
+            2: np.array([-1, 0]),  # move left
+            3: np.array([0, -1])  # move up
         }
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -39,7 +39,6 @@ class GridWorld(gym.Env):
         super().reset(seed=seed)
 
         self._agent_location = self.np_random.integers(0, self.size, size=2, dtype=int)
-
         self._target_location = self.np_random.integers(0, self.size, size=2, dtype=int)
         while np.array_equal(self._target_location, self._agent_location):
             self._target_location = self.np_random.integers(0, self.size, size=2, dtype=int)
@@ -57,21 +56,21 @@ class GridWorld(gym.Env):
 
     def _get_info(self):
         return {
-            "distance": np.linalg.norm(
-                self._agent_location - self._target_location, ord=1
-            )
+            "distance": np.linalg.norm(self._agent_location - self._target_location, ord=1)
         }
 
     def step(self, action):
         direction = self._action_to_direction[action]
 
-        self._agent_location = np.clip(
-            self._agent_location + direction, 0, self.size - 1
-        )
+        prev_distance = np.linalg.norm(self._agent_location - self._target_location, ord=1)
+
+        self._agent_location = np.clip(self._agent_location + direction, 0, self.size - 1)
+
+        new_distance = np.linalg.norm(self._agent_location - self._target_location, ord=1)
 
         terminated = np.array_equal(self._agent_location, self._target_location)
 
-        reward = 1 if terminated else 0
+        reward = prev_distance - new_distance
 
         observation = self._get_obs()
         info = self._get_info()
@@ -89,18 +88,14 @@ class GridWorld(gym.Env):
         if self.window is None and self.render_mode == "human":
             pygame.init()
             pygame.display.init()
-            self.window = pygame.display.set_mode(
-                (self.window_size, self.window_size)
-            )
+            self.window = pygame.display.set_mode((self.window_size, self.window_size))
 
         if self.clock is None and self.render_mode == "human":
             self.clock = pygame.time.Clock()
 
         canvas = pygame.Surface((self.window_size, self.window_size))
         canvas.fill((255, 255, 255))
-        pix_square_size = (
-                self.window_size / self.size
-        )
+        pix_square_size = self.window_size / self.size
 
         pygame.draw.rect(
             canvas,
@@ -113,41 +108,36 @@ class GridWorld(gym.Env):
 
         pygame.draw.circle(
             canvas,
-            (255, 0, 0),
+            (0, 0, 255),
             (self._agent_location + 0.5) * pix_square_size,
             pix_square_size / 3,
         )
 
-        # for x in range(self.size + 1):
-        #     pygame.draw.line(
-        #         canvas,
-        #         0,
-        #         (0, pix_square_size * x),
-        #         (self.window_size, pix_square_size * x),
-        #         width=3,
-        #     )
-        #     pygame.draw.line(
-        #         canvas,
-        #         0,
-        #         (pix_square_size * x, 0),
-        #         (pix_square_size * x, self.window_size),
-        #         width=3,
-        #     )
+        for x in range(self.size + 1):
+            pygame.draw.line(
+                canvas,
+                0,
+                (0, pix_square_size * x),
+                (self.window_size, pix_square_size * x),
+                width=3,
+            )
+            pygame.draw.line(
+                canvas,
+                0,
+                (pix_square_size * x, 0),
+                (pix_square_size * x, self.window_size),
+                width=3,
+            )
 
         if self.render_mode == "human":
             self.window.blit(canvas, canvas.get_rect())
-
             pygame.event.pump()
             pygame.display.update()
-
             self.clock.tick(self.metadata["render_fps"])
         else:  # rgb_array
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
-            )
+            return np.transpose(np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2))
 
     def close(self):
         if self.window is not None:
             pygame.display.quit()
             pygame.quit()
-
